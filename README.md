@@ -32,7 +32,7 @@ data/
 ```
 
 ## Getting started
-`python main.py` starts a dummy training and evaluation on a dummy dataset of just two training and one validation data points, for only 5 epochs to check that everything works.
+`python main.py` starts a dummy training and evaluation on a dummy dataset of just one training and one validation data points, for only 5 epochs to check that everything works.
 
 The program has the additional parameters `step`, `mode` and `timedependent`, which can be set by running, e.g., `python main.py --step 1 --mode train --timedependent True`, with
 - `step`: which of the datasets from the stepwise benchmark to use for training (1, 2, or 3)
