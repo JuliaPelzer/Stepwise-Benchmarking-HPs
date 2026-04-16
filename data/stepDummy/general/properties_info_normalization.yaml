@@ -1,0 +1,42 @@
+Inputs:
+  'Calc: Aquifer Thickness (steady) [m]':
+    index: 0
+    max: 35.199169045090116
+    min: -2.262013189163781
+    norm: Rescale
+  'Calc: Transmissivity (steady) [m^2/d]':
+    index: 1
+    max: 103175.63858009649
+    min: -826.2147300777058
+    norm: Rescale
+  'Input: Hydraulic Head (steady) [m a.s.l.]':
+    index: 2
+    max: 616.3266651220658
+    min: 402.7187627239033
+    norm: Rescale
+  'Input: Hydraulic Head Gradient (steady) [-]':
+    index: 3
+    max: 0.030567737687192675
+    min: -1.7414975795103373
+    norm: Rescale
+  'Material: Conductivity [m/d]':
+    index: 4
+    max: 9295.076171875
+    min: 9.503999710083006
+    norm: Rescale
+  'Material: Log(Conductivity)':
+    index: 5
+    max: 9.137240095052036
+    min: 2.2517127321155543
+    norm: Rescale
+  'Wells: Max Flow [m^3/d]':
+    index: 6
+    max: 3032.0
+    min: -3032.0
+    norm: Rescale
+Labels:
+  'Sim: Temperature (tend) [degree C]':
+    index: 0
+    max: 19.348517021154922
+    min: 0.8729731142642084
+    norm: Rescale
