@@ -7,8 +7,8 @@ import yaml
 class DatasetTimeResolved(Dataset):
     def __init__(self, root_dir):
         self.root_dir = Path(root_dir)
-        self.inputs_path = self.root_dir / "inputs_unnormed"
-        self.labels_path = self.root_dir / "labels_unnormed"
+        self.inputs_path = self.root_dir / "inputs_unnormed_reduced"
+        self.labels_path = self.root_dir / "labels_unnormed_reduced"
         self.info_path = self.root_dir.parent / "general" / "properties_info_normalization.yaml"
         assert self.inputs_path.exists() and self.labels_path.exists() and self.info_path.exists(), f"Input, label, or info path does not exist for {root_dir}"
         

@@ -7,11 +7,13 @@ from code.eval import evaluate
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--step", choices=[1, 2, 3, "Dummy"], default="Dummy")
+    parser.add_argument("--step", choices=['1', '2', '3', 'Dummy'], default="Dummy")
     parser.add_argument("--mode", choices=["train", "eval"], default="train")
     parser.add_argument("--timedependent", type=bool, default=False, help="Whether to use the time-dependent dataset (True) or the last-timestep dataset (False)")
     args = parser.parse_args()
 
+    args.step = int(args.step)
+    print(f"Running step {args.step} in {args.mode} mode with timedependent={args.timedependent}")
     # check for data, model-implementation, and in case of evaluation also for model weights
     if args.step == 1:
         assert Path("data/step1").exists(), "Data for step 1 does not exist, please download it first"
