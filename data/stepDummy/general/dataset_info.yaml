@@ -1,0 +1,20 @@
+inputs:
+- Conductivity [m/d]
+- Hydraulic Head (t0) [m a.s.l.]
+- Aquifer Thickness (t0) [m]
+- Darcy Velocity in x (t0) [m/d]
+- Darcy Velocity in y (t0) [m/d]
+- 'Wells: Max Flow Rates [m^3/d]'
+labels:
+- Temperature (timedependent) [degree C]
+spatial domain:
+  nx: 320
+  ny: 1280
+  res_x: 1.9843260188087775
+  res_y: 1.9960906958561375
+timeresolution [d]: 18.25
+timesteps:
+- 3305
+- 3395
+- 3485
+- 3575

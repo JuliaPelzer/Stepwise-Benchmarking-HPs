@@ -1,0 +1,30 @@
+Inputs:
+  Aquifer Thickness (t0) [m]:
+    index: 2
+    max: 35.199169045090116
+    min: 0.021721974797856092
+  Conductivity [m/d]:
+    index: 0
+    max: 9295.076171875
+    min: 9.503999710083006
+  Darcy Velocity in x (t0) [m/d]:
+    index: 3
+    max: 103.65204878357186
+    min: -371.86565677867463
+  Darcy Velocity in y (t0) [m/d]:
+    index: 4
+    max: 630.729521915063
+    min: -0.19386913573333767
+  Hydraulic Head (t0) [m a.s.l.]:
+    index: 1
+    max: 616.3266651220658
+    min: 402.7187627239033
+  'Wells: Max Flow Rates [m^3/d]':
+    index: 5
+    max: 3032.0
+    min: -3032.0
+Labels:
+  Temperature (timedependent) [degree C]:
+    index: 0
+    max: 14.98526125778932
+    min: 5.654506915437448

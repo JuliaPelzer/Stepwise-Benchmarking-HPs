@@ -61,8 +61,9 @@ class UNetDummy(nn.Module):
             nn.ReLU(inplace=True),
         )
     
-class Step1(nn.Module):
-    pass
+class Step1(UNetDummy):
+    def __init__(self, in_channels:int, out_channels:int):
+        super().__init__(in_channels, out_channels)
 
 class Step2(nn.Module):
     pass

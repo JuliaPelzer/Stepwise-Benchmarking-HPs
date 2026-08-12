@@ -3,72 +3,117 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import torch
 from torch.nn import MSELoss, L1Loss
+from sklearn.metrics import mean_absolute_percentage_error as mape
 import yaml
 
 from code.train import init_data, init_model, infer
-from code.metrics import LinfLoss, PATLoss
+from code.metrics import LinfLoss, MaskedMAE, PATLoss, metric_shape_mismatch
 
-def evaluate(step:int, timedependent:bool):
+def evaluate(step:int):
+    """
+    Currently, we evaluate only on the last 4 timesteps, as this is what would also be done in the competition.
+    """
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-    data_train, loader_train = init_data(step, "train_split", timedependent)
-    _, loader_val = init_data(step, "validation_split", timedependent)
-    dataloaders = {"train": loader_train, "val": loader_val}
-    try:
-        _, loader_test = init_data(step, "test_split", timedependent)
-        dataloaders["test"] = loader_test
-    except:
-        print("Test data not available, only evaluating on train and validation data")
     
-    # --- model + load weights ---
-    model = init_model(step, device, data_train)
-    model_path = Path(f"step{step}.pt")
+    # load data
+    loader_train, loader_val = init_data(step, "training_data", data_type="eval")
+    dataloaders = {"train": loader_train, "val": loader_val}
+    
+    # load model
+    model = init_model(step, device, loader_train)
+    model_path = Path(f"results/step{step}_model.pt")
     model.load_state_dict(torch.load(model_path, map_location=device))
     print(f"Loaded model from {model_path}")
 
-    # --- evaluation loop ---
-    measurements(step, device, dataloaders, model, timedependent)
-    print(f"Evaluation for step {step} completed, metrics saved to metrics_step{step}.yaml")
+    # evaluate
+    measurements(step, device, dataloaders, model)
+    print(f"Evaluation for step {step} completed and saved to metrics_step{step}.yaml")
 
-def measurements(step:int, device, dataloaders:dict, model, timedependent:bool):
+def measurements(step:int, device, dataloaders:dict, model):
+    """
+    Measure each split (train/val/test) individually, but avg over all seasons (4 last timesteps) and save yaml.
+    TODO Clean up this header
+    Included metrics are:
+    - model complexity:
+        - n_params (number of trainable parameters) (if possible?)
+        - model_size_MB (model size in MB (memory)) (if possible?) TODO - need to ask participant for this number and trust it... TODO how to communicate
+    - classical ML metrics: 
+        - MSE (L2)
+        - RMSE (MSE^0.5)
+        - MAE (L1)
+        - Max Error (L_infty)
+        - MAPE (Mean Absolute Percentage Error)
+        - [SSIM]
+    - problem-specific metrics: 
+        - PAT1.0 (Percentage Above Threshold of 1.0°C deviation)
+        - PAT0.1 (Percentage Above Threshold of 0.1°C deviation) : mask plume/no plume and substract with gt -> judge shape (achtung chaotic) TODO: compare to No. cells or No. cells GT with plume (>0.1°C)? TODO PAT correct implemented?
+        -> naa - better use shape mismatch metric (see below) TODO check if normed or unnormed
+        - masked MAE 1.0°C : to only weight those regions that are relevant to the real-world application
+        - [Wasserstein distance]
+        - [KGE (Kling-Gupta efficiency)] TODO @FB
+	    - [connectivity with all 4 seasons summed up/ max] NÖ
+
+    - where to evaluate? TODO
+        - CURRENTLY: everywhere
+        - alternative idea: everywhere except for around heat pump wells (because there nothing new would be installed anyways)
+        - at observation points (extraction wells) only, because that's where it's relevant
+
+    - leaderboard:
+        - focus on ML metrics + size metrics + 1-2 geoscience metrics
+        - a * MSE + b * MAE + c * Max Error + d * PAT1.0 + e * PAT0.1 + f * log10(n_params)
+        TODO figure out weights
+    """
+
+
     metrics = {
         "n_params": sum(p.numel() for p in model.parameters() if p.requires_grad),
-        "timedependent": timedependent,
+        "model_size_MB": sum(p.element_size() * p.numel() for p in model.parameters() if p.requires_grad) / (1024 * 1024), # TODO CHECK!! or else just read weight-file-size
                }
 
     for case, loader in dataloaders.items():
         predictions, labels = infer(model, loader, device)
-
-        if timedependent:
-            # currently only evaluate last timestep, but maybe additionally evaluate all timesteps together?
-            predictions = predictions[:, -1:, :, :]
-            labels = labels[:, -1:, :, :]
-
         assert predictions.shape == labels.shape, f"Predictions and labels have different shapes: {predictions.shape} vs {labels.shape}"
 
-        # eval only last timestep
-        metrics[case] = metrics_one_timestep(predictions, labels)
+        metrics[case] = eval_metrics(predictions, labels, unnorm_fct=dataloaders[case].dataset.dataset.unnormalize)
 
         # visualization
         # visualize(predictions, labels, case, step) #if step=None: no pic saved, just shown
 
-    yaml.safe_dump(metrics, open(f"metrics_step{step}.yaml", "w"))
+    yaml.safe_dump(metrics, open(f"results/step{step}_metrics.yaml", "w"))
 
-def metrics_one_timestep(predictions:torch.Tensor, labels:torch.Tensor):
-    pat_threshold = (0.1 - 0.8729731142642084) / (19.348517021154922 - 0.8729731142642084) # manually normed threshold of 0.1°C
+def eval_metrics(predictions:torch.Tensor, labels:torch.Tensor, unnorm_fct):
+    quick_norm = lambda x: (x - 5.0) / (15.0 - 5.0) # manually normed to (0,1) for 5-15°C
+    pat0_1_threshold = 0.1
+    pat0_1_threshold_normed = quick_norm(pat0_1_threshold) # manually normed threshold of 0.1°C
+    pat1_threshold = 1.0
+    pat1_threshold_normed = quick_norm(pat1_threshold) # manually normed threshold of 1.0°C
+    T_init = 10.0 # initial temperature of 10°C
+    T_init_normed = (T_init - 5.0) / (15.0 - 5.0) # manually normed initial temperature of 10°C
 
     list_metrics = {
         "MSE (normed) [-]": MSELoss(),
         "RMSE (normed) [-]": None,
         "MAE (normed) [-]": L1Loss(),
         "Max Error (normed) [-]": LinfLoss(),
-        "PAT 0.1 degC [%]": PATLoss(pat_threshold),
+        "MAPE (normed) [%]": lambda preds, labels: mape(labels.cpu().numpy().reshape(-1), preds.cpu().numpy().reshape(-1)),
+        "PAT 0.1 degC [%]": PATLoss(pat0_1_threshold_normed),
+        "Shape mismatch (normed) [-]": lambda preds, labels: metric_shape_mismatch(preds.cpu(), labels.cpu(), threshold=pat0_1_threshold, T_init=T_init, unnorm=unnorm_fct),
+        # "PAT 1.0 degC [%]": PATLoss(pat1_threshold or _normed),
+        "MaskedMAE (normed) [-]": MaskedMAE(threshold=pat1_threshold_normed, T_init=T_init_normed),
     }
 
     collected_metrics = {}
     for name, metric in list_metrics.items():
         if metric is not None:
-            collected_metrics[name] = metric(predictions, labels).item()
+            if "MAPE" in name:
+                collected_metrics[name] = metric(predictions, labels)
+            elif "Shape mismatch" in name:
+                collected_metrics[name] = metric(predictions, labels)[-1].item()
+            elif "MaskedMAE" in name:
+                collected_metrics[name] = metric(predictions, labels)[-1].item()
+            else:
+                collected_metrics[name] = metric(predictions, labels).item()
+            
     collected_metrics["RMSE (normed) [-]"] = torch.sqrt(MSELoss()(predictions, labels)).item()
 
     return collected_metrics
@@ -108,7 +153,7 @@ def visualize(predictions:torch.Tensor, labels:torch.Tensor, case:str, step:int=
 
         plt.tight_layout()
         if step is not None:
-            visu_dir = Path(f"visus_step{step}")
+            visu_dir = Path(f"results/step{step}_visus")
             visu_dir.mkdir(exist_ok=True)
             plt.savefig(visu_dir / f"{case}_dp{i}.png")
             print(f"Saved visualization to {visu_dir / f'{case}_dp{i}.png'}")
