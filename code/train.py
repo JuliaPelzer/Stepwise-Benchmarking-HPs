@@ -5,12 +5,12 @@ from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
 import numpy as np
 
-from code.dataset import DatasetLast4Timesteps, DatasetAllTimesteps, DatasetNoLabels
+from code.dataset import DatasetLast4Timesteps, DatasetNoLabels
 
 def train(step:int):
     device = torch.device("cuda:1") if torch.cuda.is_available() else torch.device("cpu")
 
-    loader_train, loader_val = init_data(step, "training_data", data_type="normal")
+    loader_train, loader_val = init_data(step, "training_data")
     
     model = init_model(step, device, loader_train)
 
@@ -78,13 +78,10 @@ def infer(model: torch.nn.Module, loader: DataLoader, device: torch.device):
             label_list.append(y.detach().cpu())
     return torch.cat(pred_list,dim=0), torch.cat(label_list,dim=0)
 
-def init_data(step:int, case:str, data_type:str=""):
+def init_data(step:int, case:str):
     if case == "training_data":
-        if data_type == "normal":
-            data = DatasetAllTimesteps(f"data/step{step}/{case}")
-        elif data_type == "eval":
-            data = DatasetLast4Timesteps(f"data/step{step}/{case}")
-            
+        data = DatasetLast4Timesteps(f"data/step{step}/{case}")
+
         split_idx = int(0.8*len(data))
         # currently sorted: first 80% of data points are training, last 20% validation
         data_train = torch.utils.data.Subset(data, range(split_idx))

@@ -16,7 +16,7 @@ def evaluate(step:int):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     
     # load data
-    loader_train, loader_val = init_data(step, "training_data", data_type="eval")
+    loader_train, loader_val = init_data(step, "training_data")
     dataloaders = {"train": loader_train, "val": loader_val}
     
     # load model

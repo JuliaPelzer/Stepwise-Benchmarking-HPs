@@ -32,7 +32,7 @@ class DatasetLast4Timesteps(Dataset):
         # norm data to (0,1)
         input_tensor = self.normalize(input_tensor, "inputs")
         try:
-            label_data = data['labels'][-4:,] # Select only the last 4 timesteps (assuming time is the first dimension)
+            label_data = data['labels'][-4:,] # Select only the last 4 timesteps (assuming time is the first dimension). Works for both the steadystate and the timedependent cases, as the steadystate case has only 4 timesteps anyway.
             label_tensor = torch.from_numpy(label_data)
             label_tensor = self.normalize(label_tensor, "labels")
             return {"inputs": input_tensor.to(torch.float32), "labels": label_tensor.to(torch.float32)}
@@ -82,30 +82,6 @@ class DatasetLast4Timesteps(Dataset):
         labels_maxs = np.array([item['max'] for item in sorted(self.info['Labels'].values(), key=lambda x: x['index'])])[:,None, None]
         return inputs_mins, inputs_maxs, labels_mins, labels_maxs
     
-class DatasetAllTimesteps(DatasetLast4Timesteps):
-    def __init__(self, root_dir):
-        super().__init__(root_dir)
-
-    def __getitem__(self, i):
-        dp = self.dps[i]
-        data = dict(np.load(dp))
-        input_data = data['inputs']
-        label_data = data['labels'] # Use all timesteps of labels
-
-        # Convert to tensor and ensure float type
-        input_tensor = torch.from_numpy(input_data).float()
-        label_tensor = torch.from_numpy(label_data).float()
-
-        # norm data to (0,1)
-        input_tensor = self.normalize(input_tensor, "inputs")
-        label_tensor = self.normalize(label_tensor, "labels")
-
-        return {"inputs": input_tensor.to(torch.float32), "labels": label_tensor.to(torch.float32)}
-    
-    def n_timesteps(self):
-        tmp_dp = self[0]
-        return len(tmp_dp['labels'])
-
 class DatasetNoLabels(DatasetLast4Timesteps):
     def __init__(self, root_dir):
         super().__init__(root_dir)
