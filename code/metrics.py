@@ -43,16 +43,23 @@ class MaskedMAE(nn.Module):
         # and compute the mean absolute error of the remaining values
         label_masked = torch.where(label>self.T_init+self.threshold, label-self.T_init-self.threshold, 0) + torch.where(label<self.T_init-self.threshold, label-self.T_init+self.threshold, 0)
         prediction_masked = torch.where(prediction>self.T_init+self.threshold, prediction-self.T_init-self.threshold, 0) + torch.where(prediction<self.T_init-self.threshold, prediction-self.T_init+self.threshold, 0)
+        
+        assert torch.mean(torch.abs(label_masked)) != 0, "Denominator is zero"
         if label_masked.ndim == 3:
-            normed_mae = torch.mean(torch.abs(label_masked - prediction_masked)) / torch.mean(torch.abs(label_masked))
+            nominator = torch.mean(torch.abs(label_masked - prediction_masked))
+            denominator = torch.mean(torch.abs(label_masked))
         elif label_masked.ndim == 4:
-            normed_mae = torch.mean(torch.abs(label_masked - prediction_masked), dim=(1,2,3)) / torch.mean(torch.abs(label_masked), dim=(1,2,3))
-            normed_mae = torch.mean(normed_mae) # average over batch
+            nominator = torch.mean(torch.abs(label_masked - prediction_masked), dim=(1,2,3)) 
+            denominator = torch.mean(torch.abs(label_masked), dim=(1,2,3))
         else:
             raise ValueError("MaskedMAE only supports 3D or 4D tensors, but got tensor with shape: {}".format(label_masked.shape))
+        
+        valid = denominator != 0 # do I want to handle zero-cases differently than excluding them?
+        normed_mae = nominator[valid] / denominator[valid]
+        normed_mae = torch.mean(normed_mae) # average over batch
         return label_masked, prediction_masked, normed_mae
 
-def metric_shape_mismatch(prediction, label, threshold:float=0.1, T_init:float=10.0, unnorm:dict=None):
+def metric_shape_mismatch(prediction, label, threshold:float=0.1, T_init:float=10.0):
     """
     Computes the shape match metric between a label and a prediction.
     
@@ -61,10 +68,8 @@ def metric_shape_mismatch(prediction, label, threshold:float=0.1, T_init:float=1
         prediction (np.ndarray): The predicted output.
         threshold (float): The threshold to binarize the prediction.
     """
-    if (prediction.max() <= 1.5 and prediction.min() >= -0.5) or (label.max() <= 1.5 and label.min() >= -0.5):
-        prediction, label = unnorm(prediction, "labels"), unnorm(label, "labels")
-    # now we can expect data to not be normalized.
-
+    # we expect the data to not be normalized
+    assert (prediction.max() > 1.5 and prediction.min() > 0.5) and (label.max() > 1.5 and label.min() > 0.5), "either labels or predictions are not UNnormed"
     assert label.shape == prediction.shape, "Label and prediction must have the same shape."
     assert label.shape[-3] >= 3, "Label and prediction must have at least 4 channels, i.e., timesteps."
 
@@ -81,7 +86,7 @@ def metric_shape_mismatch(prediction, label, threshold:float=0.1, T_init:float=1
         mismatch_visual = torch.abs(lab - pred)
         mismatch_number = torch.sum(mismatch_visual) / torch.sum(lab)
         if mismatch_number > 1.0:
-            print("Warning: mismatch number is greater than 1.0, which should not happen. This indicates a potential error in the metric computation OR that the prediction is just reaaaally bad at the moment - TODO check with better model.")
+            print(f"Warning: mismatch number is greater than 1.0: {mismatch_number}, which should not happen. This indicates a really bad prediction.")
         return mismatch_visual, mismatch_number
 
     if label.ndim == 4:

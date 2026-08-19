@@ -10,7 +10,7 @@ from code.dataset import DatasetLast4Timesteps, DatasetNoLabels
 def train(step:int):
     device = torch.device("cuda:1") if torch.cuda.is_available() else torch.device("cpu")
 
-    loader_train, loader_val = init_data(step, "training_data")
+    loader_train, loader_val = init_data(step, "training_data", eval=False)
     
     model = init_model(step, device, loader_train)
 
@@ -78,18 +78,25 @@ def infer(model: torch.nn.Module, loader: DataLoader, device: torch.device):
             label_list.append(y.detach().cpu())
     return torch.cat(pred_list,dim=0), torch.cat(label_list,dim=0)
 
-def init_data(step:int, case:str):
+def init_data(step:int, case:str, eval:bool=False):
     if case == "training_data":
         data = DatasetLast4Timesteps(f"data/step{step}/{case}")
 
-        split_idx = int(0.8*len(data))
-        # currently sorted: first 80% of data points are training, last 20% validation
-        data_train = torch.utils.data.Subset(data, range(split_idx))
-        data_val = torch.utils.data.Subset(data, range(split_idx, len(data)))
-        loader_train = DataLoader(data_train, batch_size=64, shuffle=True)
-        loader_val = DataLoader(data_val, batch_size=64, shuffle=False)
-        print(f"Loaded {case}: {type(data).__name__} with {len(data)} samples of shapes inputs:{list(data[0]['inputs'].shape)} and labels:{list(data[0]['labels'].shape)}")
-        return loader_train, loader_val
+        if not eval:
+            # currently sorted: first 80% of data points are training, last 20% validation
+            split_idx = int(0.8*len(data))
+            data_train = torch.utils.data.Subset(data, range(split_idx))
+            data_val = torch.utils.data.Subset(data, range(split_idx, len(data)))
+            loader_train = DataLoader(data_train, batch_size=64, shuffle=True)
+            loader_val = DataLoader(data_val, batch_size=64, shuffle=False)
+            print(f"Loaded {case}: {type(data).__name__} with {len(data)} samples of shapes inputs:{list(data[0]['inputs'].shape)} and labels:{list(data[0]['labels'].shape)}")
+            return loader_train, loader_val
+        else:
+            split_idx = int(1.0*len(data))
+            data_train = torch.utils.data.Subset(data, range(split_idx))
+            loader_train = DataLoader(data_train, batch_size=64, shuffle=True)
+            print(f"Loaded {case}: {type(data).__name__} with {len(data)} samples of shapes inputs:{list(data[0]['inputs'].shape)} and labels:{list(data[0]['labels'].shape)}")
+            return loader_train
     else:
         data = DatasetNoLabels(f"data/step{step}/{case}")
         loader = DataLoader(data, batch_size=64, shuffle=False)
@@ -109,7 +116,7 @@ def init_model(step:int, device, dataloader: DataLoader, mode:str="train"):
 
     if mode in ["train", "eval"]:
         print(f"Initializing model for step {step} with input size {dataloader.dataset.dataset.n_inputs()} and output size {dataloader.dataset.dataset.n_outputs()} and prediction timesteps {dataloader.dataset.dataset.n_pred_timesteps()}")
-        model = Model(dataloader.dataset.dataset.n_inputs(), dataloader.dataset.dataset.n_pred_timesteps()).to(device)
+        model = Model(dataloader.dataset.dataset.n_inputs(), dataloader.dataset.dataset.n_pred_timesteps()).to(device) #TODO .n_outputs() for SWE dataset
     elif mode == "bm": # benchmark mode
         print(f"Initializing model for step {step} with input size {dataloader.dataset.n_inputs()} and output size {dataloader.dataset.n_outputs()} and prediction timesteps {dataloader.dataset.n_pred_timesteps()}")
         model = Model(dataloader.dataset.n_inputs(), dataloader.dataset.n_pred_timesteps()).to(device)

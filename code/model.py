@@ -22,7 +22,7 @@ class UNetDummy(nn.Module):
             self.decoders.append(UNetDummy._block(features, features//2, kernel_size))
             features = features // 2
 
-        self.last_conv = nn.Conv2d(in_channels=features, out_channels=out_channels, kernel_size=1)
+        self.conv = nn.Conv2d(in_channels=features, out_channels=out_channels, kernel_size=1)
 
     def forward(self, x: Tensor) -> Tensor:
         encodings = []
@@ -37,7 +37,7 @@ class UNetDummy(nn.Module):
             x = cat((x, encoding), dim=1)
             x = decoder(x)
 
-        return self.last_conv(x)
+        return self.conv(x)
     
     @staticmethod
     def _conv(in_channels, out_channels, kernel_size):

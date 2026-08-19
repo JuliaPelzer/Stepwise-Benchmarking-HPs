@@ -27,7 +27,7 @@ automatically installs the required packages that are not already installed.
 **You can decide for one of three *training dataset* variants** (per step):
 - `_steadystate`: labels contain only 4 timesteps - same as we test against (one per season, after 10 years of simulation time)
 - `_timeseries`: labels contain all prior timesteps as additional information, potentially useful for training, i.e., 40 timesteps in total, but only the last 4 are used for evaluation
-- `_interim_velocities`: same as steadystate, but additionally contains the steady-state velocity fields as interim labels, which can be used for training, but are not available for evaluation
+- `_interim_velocities`: same as steadystate, but additionally contains the steady-state velocity fields as interim labels, which can be used for training, but are not available for evaluation since they are outputs of the simulations rather than inputs
 
 This code focuses on the steadystate dataset as a reference.
 

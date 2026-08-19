@@ -16,14 +16,16 @@ def evaluate(step:int):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     
     # load data
-    loader_train, loader_val = init_data(step, "training_data")
-    dataloaders = {"train": loader_train, "val": loader_val}
+    loader_train = init_data(step, "training_data", eval=True)
+    dataloaders = {"train": loader_train}
     
     # load model
     model = init_model(step, device, loader_train)
     model_path = Path(f"results/step{step}_model.pt")
     model.load_state_dict(torch.load(model_path, map_location=device))
     print(f"Loaded model from {model_path}")
+
+    # visualize(model, dataloaders["val"], device, "val", step)
 
     # evaluate
     measurements(step, device, dataloaders, model)
@@ -32,42 +34,32 @@ def evaluate(step:int):
 def measurements(step:int, device, dataloaders:dict, model):
     """
     Measure each split (train/val/test) individually, but avg over all seasons (4 last timesteps) and save yaml.
-    TODO Clean up this header
     Included metrics are:
     - model complexity:
-        - n_params (number of trainable parameters) (if possible?)
-        - model_size_MB (model size in MB (memory)) (if possible?) TODO - need to ask participant for this number and trust it... TODO how to communicate
+        - n_params (number of trainable parameters)
+        - model_size_MB (model size in MB (memory))
+        ! need to ask participant for this number and trust it, but best models should be uploaded anyways for the purpose of open science, so any major misconduct is spotted anyways
+        TODO how to communicate (through the kaggle interface)
     - classical ML metrics: 
+        - MAE (L1)
+        - MAPE (Mean Absolute Percentage Error)
         - MSE (L2)
         - RMSE (MSE^0.5)
-        - MAE (L1)
         - Max Error (L_infty)
-        - MAPE (Mean Absolute Percentage Error)
-        - [SSIM]
     - problem-specific metrics: 
-        - PAT1.0 (Percentage Above Threshold of 1.0°C deviation)
-        - PAT0.1 (Percentage Above Threshold of 0.1°C deviation) : mask plume/no plume and substract with gt -> judge shape (achtung chaotic) TODO: compare to No. cells or No. cells GT with plume (>0.1°C)? TODO PAT correct implemented?
-        -> naa - better use shape mismatch metric (see below) TODO check if normed or unnormed
-        - masked MAE 1.0°C : to only weight those regions that are relevant to the real-world application
-        - [Wasserstein distance]
-        - [KGE (Kling-Gupta efficiency)] TODO @FB
-	    - [connectivity with all 4 seasons summed up/ max] NÖ
-
-    - where to evaluate? TODO
-        - CURRENTLY: everywhere
-        - alternative idea: everywhere except for around heat pump wells (because there nothing new would be installed anyways)
-        - at observation points (extraction wells) only, because that's where it's relevant
-
+        - shape mismatch: to judge if the plumes follow the correct paths
+        - focused error (masked MAE 1.0°C): to only weight those regions that are relevant to the real-world application
+        - [PAT0.1 (Percentage Above Threshold of 0.1°C deviation) : mask plume/no plume and substract with gt]
     - leaderboard:
         - focus on ML metrics + size metrics + 1-2 geoscience metrics
-        - a * MSE + b * MAE + c * Max Error + d * PAT1.0 + e * PAT0.1 + f * log10(n_params)
-        TODO figure out weights
+        - a * MSE + b * MAE + c * Max Error + d * shape_mismatch + e * focused error + f * log10(n_params)
+        TODO define reasonable weights
     """
 
 
     metrics = {
         "n_params": sum(p.numel() for p in model.parameters() if p.requires_grad),
-        "model_size_MB": sum(p.element_size() * p.numel() for p in model.parameters() if p.requires_grad) / (1024 * 1024), # TODO CHECK!! or else just read weight-file-size
+        "model_size_MB": sum(p.element_size() * p.numel() for p in model.parameters() if p.requires_grad) / (1024 * 1024), # or just read weight-file-size
                }
 
     for case, loader in dataloaders.items():
@@ -76,45 +68,51 @@ def measurements(step:int, device, dataloaders:dict, model):
 
         metrics[case] = eval_metrics(predictions, labels, unnorm_fct=dataloaders[case].dataset.dataset.unnormalize)
 
-        # visualization
-        # visualize(predictions, labels, case, step) #if step=None: no pic saved, just shown
-
     yaml.safe_dump(metrics, open(f"results/step{step}_metrics.yaml", "w"))
 
 def eval_metrics(predictions:torch.Tensor, labels:torch.Tensor, unnorm_fct):
-    quick_norm = lambda x: (x - 5.0) / (15.0 - 5.0) # manually normed to (0,1) for 5-15°C
     pat0_1_threshold = 0.1
-    pat0_1_threshold_normed = quick_norm(pat0_1_threshold) # manually normed threshold of 0.1°C
     pat1_threshold = 1.0
-    pat1_threshold_normed = quick_norm(pat1_threshold) # manually normed threshold of 1.0°C
     T_init = 10.0 # initial temperature of 10°C
-    T_init_normed = (T_init - 5.0) / (15.0 - 5.0) # manually normed initial temperature of 10°C
 
     list_metrics = {
         "MSE (normed) [-]": MSELoss(),
+        "MSE (unnormed) [degC^2]": MSELoss(),
         "RMSE (normed) [-]": None,
+        "RMSE (unnormed) [degC]": None,
         "MAE (normed) [-]": L1Loss(),
+        "MAE (unnormed) [degC]": L1Loss(),
         "Max Error (normed) [-]": LinfLoss(),
+        "Max Error (unnormed) [degC]": LinfLoss(), 
         "MAPE (normed) [%]": lambda preds, labels: mape(labels.cpu().numpy().reshape(-1), preds.cpu().numpy().reshape(-1)),
-        "PAT 0.1 degC [%]": PATLoss(pat0_1_threshold_normed),
-        "Shape mismatch (normed) [-]": lambda preds, labels: metric_shape_mismatch(preds.cpu(), labels.cpu(), threshold=pat0_1_threshold, T_init=T_init, unnorm=unnorm_fct),
-        # "PAT 1.0 degC [%]": PATLoss(pat1_threshold or _normed),
-        "MaskedMAE (normed) [-]": MaskedMAE(threshold=pat1_threshold_normed, T_init=T_init_normed),
+        "PAT 0.1degC (unnormed) [%]": PATLoss(pat0_1_threshold),
+        "PAT 1.0degC (unnormed) [%]": PATLoss(pat1_threshold),
+        "MaskedMAE (unnormed) [degC]": MaskedMAE(threshold=pat1_threshold, T_init=T_init),
+        "Shape mismatch (unnormed) [-]": lambda preds, labels: metric_shape_mismatch(preds.cpu(), labels.cpu(), threshold=pat0_1_threshold, T_init=T_init),
     }
+
+    unnormed_predictions = unnorm_fct(predictions, "labels")
+    unnormed_labels = unnorm_fct(labels, "labels")
 
     collected_metrics = {}
     for name, metric in list_metrics.items():
-        if metric is not None:
+        if "unnormed" in name:
+            used_pred = unnormed_predictions
+            used_lab = unnormed_labels
+        else:
+            used_pred = predictions
+            used_lab = labels
+
+        if metric is not None: # skip RMSE for now and calculate later
             if "MAPE" in name:
-                collected_metrics[name] = metric(predictions, labels)
-            elif "Shape mismatch" in name:
-                collected_metrics[name] = metric(predictions, labels)[-1].item()
-            elif "MaskedMAE" in name:
-                collected_metrics[name] = metric(predictions, labels)[-1].item()
+                collected_metrics[name] = metric(used_pred, used_lab)
+            elif "Shape mismatch" in name or "MaskedMAE" in name:
+                collected_metrics[name] = metric(used_pred, used_lab)[-1].item()
             else:
-                collected_metrics[name] = metric(predictions, labels).item()
+                collected_metrics[name] = metric(used_pred, used_lab).item()
             
     collected_metrics["RMSE (normed) [-]"] = torch.sqrt(MSELoss()(predictions, labels)).item()
+    collected_metrics["RMSE (unnormed) [degC]"] = torch.sqrt(MSELoss()(unnormed_predictions, unnormed_labels)).item()
 
     return collected_metrics
 
@@ -124,38 +122,46 @@ def aligned_cbar(*args, **kwargs):
     cb = plt.colorbar(*args, cax=cax, **kwargs)
     return cb
 
-def visualize(predictions:torch.Tensor, labels:torch.Tensor, case:str, step:int=None):
+def visualize(model, dataloader, device, case:str, step:int=None):
+    predictions, labels = infer(model, dataloader, device)
     for i, (prediction, label) in enumerate(zip(predictions, labels)):
         prediction = prediction.squeeze().numpy()
         label = label.squeeze().numpy()
-        error = label - prediction
+        try:
+            error = label - prediction
+        except:
+            error = torch.zeros((100,100))
 
-        plt.figure(figsize=(16, 5))
+        for j, (p_season, l_season, e_season) in enumerate(zip(prediction, label, error)):
+            plt.figure(figsize=(16, 5))
 
-        plt.subplot(1, 3, 1)
-        plt.imshow(label.T, origin="lower", cmap="RdBu_r")#, vmin=0, vmax=1)
-        plt.title("Label")
-        plt.ylabel("y [cells]")
-        plt.xlabel("x [cells]")
-        aligned_cbar()
+            plt.subplot(1, 3, 1)
+            plt.imshow(l_season.T, origin="lower", cmap="RdBu_r")#, vmin=0, vmax=1)
+            plt.title("Label")
+            plt.ylabel("y [cells]")
+            plt.xlabel("x [cells]")
+            aligned_cbar()
 
-        plt.subplot(1, 3, 2)
-        plt.imshow(prediction.T, origin="lower", cmap="RdBu_r")#, vmin=0, vmax=1)
-        plt.title("Prediction")
-        plt.xlabel("x [cells]")
-        aligned_cbar()
+            plt.subplot(1, 3, 2)
+            plt.imshow(p_season.T, origin="lower", cmap="RdBu_r")#, vmin=0, vmax=1)
+            plt.title("Prediction")
+            plt.xlabel("x [cells]")
+            aligned_cbar()
 
-        plt.subplot(1, 3, 3)
-        plt.imshow(error.T, origin="lower", cmap="RdBu_r")
-        plt.title("Error (GT - Prediction)")
-        plt.xlabel("x [cells]")
-        aligned_cbar()
+            plt.subplot(1, 3, 3)
+            plt.imshow(e_season.T, origin="lower", cmap="RdBu_r")
+            plt.title("Error (GT - Prediction)")
+            plt.xlabel("x [cells]")
+            aligned_cbar()
 
-        plt.tight_layout()
-        if step is not None:
-            visu_dir = Path(f"results/step{step}_visus")
-            visu_dir.mkdir(exist_ok=True)
-            plt.savefig(visu_dir / f"{case}_dp{i}.png")
-            print(f"Saved visualization to {visu_dir / f'{case}_dp{i}.png'}")
-        else:
-            plt.show()
+            plt.tight_layout()
+            if step is not None:
+                visu_dir = Path(f"results/step{step}_visus")
+                visu_dir.mkdir(exist_ok=True)
+                plt.savefig(visu_dir / f"{case}_dp{i}_season{j}.png")
+                print(f"Saved visualization to {visu_dir / f'{case}_dp{i}_season{j}.png'}")
+            else:
+                plt.show()
+
+        if i >= 2:
+            break

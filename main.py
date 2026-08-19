@@ -1,5 +1,4 @@
 import argparse
-import yaml
 from pathlib import Path
 
 from code.train import train, prep_for_competition
