@@ -21,7 +21,7 @@ automatically installs the required packages that are not already installed.
     - step 1: https://doi.org/10.18419/DARUS-5806
     - step 2: https://doi.org/10.18419/DARUS-5807
     - step 3: https://doi.org/10.18419/DARUS-5808
-    - step 3b: TODO! (add link, description, code)
+    - step 3b: https://doi.org/10.18419/DARUS-6304 (add description, code)
 - download and unzip the data files for one of the steps into `data/stepX` and replace `X` with the respective step number. 
 
 **You can decide for one of three *training dataset* variants** (per step):
@@ -29,9 +29,9 @@ automatically installs the required packages that are not already installed.
 - `_timeseries`: labels contain all prior timesteps as additional information, potentially useful for training, i.e., 40 timesteps in total, but only the last 4 are used for evaluation
 - `_interim_velocities`: same as steadystate, but additionally contains the steady-state velocity fields as interim labels, which can be used for training, but are not available for evaluation since they are outputs of the simulations rather than inputs
 
-This code focuses on the steadystate dataset as a reference.
+This code focuses on the steady-state dataset as a reference.
 
-After the download into proper folders, the file structure should look like this:
+After downloading into the proper folders, the file structure should look like this:
 ```
 data/
     stepX/
@@ -48,7 +48,7 @@ data/
 If you want to use more information from the raw simulation outputs, e.g., fixed subsurface parameters or other interim labels, please refer to https://doi.org/10.18419/DARUS-5920.
 
 ## Getting started
-`python main.py` starts a dummy training and evaluation on a dummy dataset of just one training and one validation data points, for only 5 epochs to check that everything works.
+`python main.py` starts a dummy training and evaluation on a dummy dataset of just one training and one validation data point, for only 5 epochs to check that everything works.
 
 The program has the additional parameters `step`, `mode` and `timedependent`, which can be set by running, e.g., `python main.py --step 1 --mode train --timedependent True`, with
 - `step`: which of the datasets from the stepwise benchmark to use for training (1, 2, or 3)
@@ -64,7 +64,7 @@ You can also adapt the input field selection in a preprocessing step in `train.p
 Of course, you can also just download the data and use your own training framework.
 
 ## Testing your trained model against unseen data
-If you would like to check your model's performance on the hidden test labels, you can upload its predictions to kaggle https://www.kaggle.com/organizations/sciml-geobench/. Be aware to keep the format the same as above to ensure that the evaluation works correctly. The evaluation metrics are the same as implemented here.
+If you would like to check your model's performance on the hidden test labels, you can upload its predictions to Kaggle: https://www.kaggle.com/organizations/sciml-geobench/. Be sure to keep the format the same as above to ensure that the evaluation works correctly. The evaluation metrics are the same as implemented here.
 
 ## Additional resources
-The raw simulation data of all steps is available at https://doi.org/10.18419/DARUS-5920, which contains the full time series of not only every 3 months but every 5 days, unstructured data at a finer resolution around the wells, and h5 format. It additionally contains an easier dataset with no cooling during summer months, but only heating in winter, that we currently ignore.
+The raw simulation data of all steps is available at https://doi.org/10.18419/DARUS-5920, which contains the full time series not only every 3 months but every 5 days, unstructured data at a finer resolution around the wells, and in HDF5 format. It additionally contains an easier dataset with no cooling during summer months, but only heating in winter, that we currently ignore.
